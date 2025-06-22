@@ -1,213 +1,243 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es" class="scroll-smooth">
 <head>
-  <meta charset="UTF-8">
-  <title>Pong Game</title>
-  <style>
-    body {
-      background: #222;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      user-select: none;
-    }
-    #pongCanvas {
-      background: #111;
-      display: block;
-      border: 3px solid #fff;
-      box-shadow: 0 0 15px #000;
-    }
-    #scoreboard {
-      color: #fff;
-      text-align: center;
-      font-family: monospace;
-      font-size: 28px;
-      margin-bottom: 10px;
-      letter-spacing: 2px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Portafolio Personal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Iconos: Lucide Icons se cargará al final del body para evitar errores -->
+
+    <style>
+        /* Estilo principal con la fuente Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Gris oscuro para el fondo */
+            color: #d1d5db; /* Gris claro para el texto */
+        }
+        /* Animación para aparecer al hacer scroll */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.8s ease-out, transform 0.6s ease-out;
+        }
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        /* Estilo para la barra de navegación pegajosa */
+        .sticky-nav {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid #374151; /* Borde sutil */
+        }
+    </style>
 </head>
-<body>
-  <div>
-    <div id="scoreboard">0 : 0</div>
-    <canvas id="pongCanvas" width="700" height="400"></canvas>
-  </div>
-  <script>
-    const canvas = document.getElementById('pongCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreboard = document.getElementById('scoreboard');
-    const WIDTH = canvas.width;
-    const HEIGHT = canvas.height;
+<body class="antialiased">
 
-    // Paddle settings
-    const PADDLE_WIDTH = 12;
-    const PADDLE_HEIGHT = 80;
-    const PADDLE_MARGIN = 12;
-    const PADDLE_SPEED = 5;
+    <!-- ===== BARRA DE NAVEGACIÓN ===== -->
+    <header id="header" class="sticky-nav">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="#" class="text-2xl font-bold text-white">Tu Nombre</a>
+            <div class="hidden md:flex space-x-6 items-center">
+                <a href="#about" class="hover:text-cyan-400 transition-colors duration-300">Sobre mí</a>
+                <a href="#projects" class="hover:text-cyan-400 transition-colors duration-300">Proyectos</a>
+                <a href="#contact" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition-transform duration-300 hover:scale-105">Contacto</a>
+            </div>
+            <!-- Menú para móvil -->
+            <button id="mobile-menu-button" class="md:hidden p-2 rounded-md hover:bg-gray-700 focus:outline-none">
+                <svg id="menu-icon-open" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                <svg id="menu-icon-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </nav>
+        <!-- Contenido del menú móvil -->
+        <div id="mobile-menu" class="hidden md:hidden px-6 pb-4 space-y-2">
+            <a href="#about" class="block hover:text-cyan-400 transition-colors duration-300">Sobre mí</a>
+            <a href="#projects" class="block hover:text-cyan-400 transition-colors duration-300">Proyectos</a>
+            <a href="#contact" class="block mt-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition-transform duration-300 hover:scale-105 text-center">Contacto</a>
+        </div>
+    </header>
 
-    // Ball settings
-    const BALL_SIZE = 14;
-    const BALL_SPEED = 4;
+    <main class="container mx-auto px-6 py-12 md:py-20">
 
-    // State
-    let leftPaddle = {
-      x: PADDLE_MARGIN,
-      y: HEIGHT / 2 - PADDLE_HEIGHT / 2,
-      vy: 0
-    };
-    let rightPaddle = {
-      x: WIDTH - PADDLE_WIDTH - PADDLE_MARGIN,
-      y: HEIGHT / 2 - PADDLE_HEIGHT / 2,
-      vy: 0
-    };
-    let ball = {
-      x: WIDTH / 2 - BALL_SIZE / 2,
-      y: HEIGHT / 2 - BALL_SIZE / 2,
-      vx: BALL_SPEED * (Math.random() > 0.5 ? 1 : -1),
-      vy: BALL_SPEED * (Math.random() * 2 - 1)
-    };
-    let scores = [0, 0];
-    let keys = { ArrowUp: false, ArrowDown: false };
+        <!-- ===== SECCIÓN DE INICIO (HERO) ===== -->
+        <section id="home" class="text-center min-h-[60vh] flex flex-col justify-center items-center">
+            <h1 class="text-4xl md:text-6xl font-bold text-white reveal">Hola, soy [Tu Nombre]</h1>
+            <p class="mt-4 text-xl md:text-2xl text-cyan-400 font-medium reveal" style="transition-delay: 200ms;">Desarrollador Web y Creador Digital</p>
+            <p class="mt-6 max-w-2xl mx-auto text-lg text-gray-300 reveal" style="transition-delay: 400ms;">
+                Transformo ideas en realidades digitales. Especializado en crear experiencias web modernas, intuitivas y de alto rendimiento.
+            </p>
+            <a href="#projects" class="mt-8 bg-transparent border-2 border-cyan-500 text-cyan-500 font-bold py-3 px-6 rounded-lg hover:bg-cyan-500 hover:text-white transition-all duration-300 reveal" style="transition-delay: 600ms;">
+                Ver mi trabajo
+            </a>
+        </section>
 
-    // Draw functions
-    function drawRect(x, y, w, h, color="#fff") {
-      ctx.fillStyle = color;
-      ctx.fillRect(x, y, w, h);
-    }
+        <!-- ===== SECCIÓN SOBRE MÍ ===== -->
+        <section id="about" class="py-20">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-white reveal">Sobre Mí</h2>
+                <div class="w-24 h-1 bg-cyan-500 mx-auto mt-4 reveal"></div>
+            </div>
+            <div class="flex flex-col md:flex-row items-center gap-10 md:gap-16">
+                <!-- Reemplaza esta URL con una imagen tuya -->
+                <img src="https://placehold.co/400x400/1f2937/7dd3fc?text=Tu+Foto" alt="Foto de perfil" class="w-48 h-48 md:w-64 md:h-64 rounded-full object-cover shadow-lg shadow-cyan-500/20 reveal">
+                <div class="text-lg text-gray-300 flex-1 reveal" style="transition-delay: 200ms;">
+                    <p>
+                        ¡Hola! Soy un apasionado desarrollador de software con base en [Tu Ciudad/País]. Mi fascinación por la tecnología comenzó desde joven y me ha llevado a explorar el vasto mundo del desarrollo web.
+                    </p>
+                    <p class="mt-4">
+                        Me especializo en el stack MERN (MongoDB, Express, React, Node.js), pero siempre estoy aprendiendo y experimentando con nuevas tecnologías. Mi objetivo es crear aplicaciones que no solo funcionen a la perfección, sino que también ofrezcan una experiencia de usuario excepcional.
+                    </p>
+                    <p class="mt-4">
+                        Cuando no estoy programando, me encontrarás explorando rutas de senderismo, leyendo ciencia ficción o contribuyendo a proyectos de código abierto.
+                    </p>
+                </div>
+            </div>
+        </section>
 
-    function drawBall() {
-      ctx.beginPath();
-      ctx.arc(ball.x + BALL_SIZE / 2, ball.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff";
-      ctx.fill();
-    }
+        <!-- ===== SECCIÓN DE PROYECTOS ===== -->
+        <section id="projects" class="py-20">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-white reveal">Mis Proyectos</h2>
+                <div class="w-24 h-1 bg-cyan-500 mx-auto mt-4 reveal"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <!-- Proyecto 1 -->
+                <div class="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-cyan-500/30 transition-shadow duration-300 transform hover:-translate-y-2 reveal">
+                    <img src="https://placehold.co/600x400/1f2937/7dd3fc?text=Proyecto+1" alt="Imagen del Proyecto 1" class="w-full h-48 object-cover">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-white mb-2">Nombre del Proyecto 1</h3>
+                        <p class="text-gray-400 mb-4">Una breve descripción de tu proyecto. Explica qué hace, qué problema resuelve y las tecnologías que utilizaste.</p>
+                        <div class="flex justify-end gap-4">
+                            <a href="#" target="_blank" class="text-cyan-400 hover:text-white transition-colors duration-300">Demo</a>
+                            <a href="#" target="_blank" class="text-cyan-400 hover:text-white transition-colors duration-300">Código</a>
+                        </div>
+                    </div>
+                </div>
 
-    function drawNet() {
-      ctx.save();
-      ctx.strokeStyle = "#444";
-      ctx.setLineDash([8, 16]);
-      ctx.beginPath();
-      ctx.moveTo(WIDTH / 2, 0);
-      ctx.lineTo(WIDTH / 2, HEIGHT);
-      ctx.stroke();
-      ctx.restore();
-    }
+                <!-- Proyecto 2 -->
+                <div class="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-cyan-500/30 transition-shadow duration-300 transform hover:-translate-y-2 reveal" style="transition-delay: 200ms;">
+                    <img src="https://placehold.co/600x400/1f2937/7dd3fc?text=Proyecto+2" alt="Imagen del Proyecto 2" class="w-full h-48 object-cover">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-white mb-2">Nombre del Proyecto 2</h3>
+                        <p class="text-gray-400 mb-4">Una breve descripción de tu proyecto. Explica qué hace, qué problema resuelve y las tecnologías que utilizaste.</p>
+                        <div class="flex justify-end gap-4">
+                            <a href="#" target="_blank" class="text-cyan-400 hover:text-white transition-colors duration-300">Demo</a>
+                            <a href="#" target="_blank" class="text-cyan-400 hover:text-white transition-colors duration-300">Código</a>
+                        </div>
+                    </div>
+                </div>
 
-    function draw() {
-      ctx.clearRect(0, 0, WIDTH, HEIGHT);
-      drawNet();
-      drawRect(leftPaddle.x, leftPaddle.y, PADDLE_WIDTH, PADDLE_HEIGHT);
-      drawRect(rightPaddle.x, rightPaddle.y, PADDLE_WIDTH, PADDLE_HEIGHT);
-      drawBall();
-    }
+                <!-- Proyecto 3 -->
+                <div class="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-cyan-500/30 transition-shadow duration-300 transform hover:-translate-y-2 reveal" style="transition-delay: 400ms;">
+                    <img src="https://placehold.co/600x400/1f2937/7dd3fc?text=Proyecto+3" alt="Imagen del Proyecto 3" class="w-full h-48 object-cover">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-white mb-2">Nombre del Proyecto 3</h3>
+                        <p class="text-gray-400 mb-4">Una breve descripción de tu proyecto. Explica qué hace, qué problema resuelve y las tecnologías que utilizaste.</p>
+                        <div class="flex justify-end gap-4">
+                            <a href="#" target="_blank" class="text-cyan-400 hover:text-white transition-colors duration-300">Demo</a>
+                            <a href="#" target="_blank" class="text-cyan-400 hover:text-white transition-colors duration-300">Código</a>
+                        </div>
+                    </div>
+                </div>
 
-    // Input
-    document.addEventListener('keydown', e => {
-      if (e.key === 'ArrowUp') keys.ArrowUp = true;
-      if (e.key === 'ArrowDown') keys.ArrowDown = true;
-    });
-    document.addEventListener('keyup', e => {
-      if (e.key === 'ArrowUp') keys.ArrowUp = false;
-      if (e.key === 'ArrowDown') keys.ArrowDown = false;
-    });
-    canvas.addEventListener('mousemove', e => {
-      // Move left paddle to mouse Y (centered)
-      const rect = canvas.getBoundingClientRect();
-      let mouseY = e.clientY - rect.top;
-      leftPaddle.y = mouseY - PADDLE_HEIGHT / 2;
-      // Clamp paddle
-      if (leftPaddle.y < 0) leftPaddle.y = 0;
-      if (leftPaddle.y + PADDLE_HEIGHT > HEIGHT) leftPaddle.y = HEIGHT - PADDLE_HEIGHT;
-    });
+            </div>
+        </section>
 
-    // Game logic
-    function update() {
-      // Arrow keys control (overrides mouse if pressed)
-      if (keys.ArrowUp) leftPaddle.y -= PADDLE_SPEED;
-      if (keys.ArrowDown) leftPaddle.y += PADDLE_SPEED;
-      // Clamp paddle
-      if (leftPaddle.y < 0) leftPaddle.y = 0;
-      if (leftPaddle.y + PADDLE_HEIGHT > HEIGHT) leftPaddle.y = HEIGHT - PADDLE_HEIGHT;
+        <!-- ===== SECCIÓN DE CONTACTO ===== -->
+        <section id="contact" class="py-20 text-center">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-white reveal">Hablemos</h2>
+                <div class="w-24 h-1 bg-cyan-500 mx-auto mt-4 reveal"></div>
+            </div>
+            <p class="max-w-xl mx-auto text-lg text-gray-300 mb-8 reveal" style="transition-delay: 200ms;">
+                ¿Tienes una idea o un proyecto en mente? ¿Buscas un desarrollador para tu equipo? Me encantaría saber de ti. ¡Contáctame!
+            </p>
+            <div class="reveal" style="transition-delay: 400ms;">
+                 <a href="mailto:tu.correo@ejemplo.com" class="inline-block bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg transition-transform duration-300 hover:scale-105 text-lg">
+                    Enviar un correo
+                </a>
+            </div>
+           
+            <div class="mt-12 flex justify-center gap-6 reveal" style="transition-delay: 600ms;">
+                <!-- Reemplaza '#' con tus URLs de redes sociales -->
+                <a href="#" aria-label="GitHub" class="text-gray-400 hover:text-white transition-transform duration-300 hover:scale-110">
+                    <i data-lucide="github" class="w-8 h-8"></i>
+                </a>
+                <a href="#" aria-label="LinkedIn" class="text-gray-400 hover:text-white transition-transform duration-300 hover:scale-110">
+                    <i data-lucide="linkedin" class="w-8 h-8"></i>
+                </a>
+                <a href="#" aria-label="Twitter" class="text-gray-400 hover:text-white transition-transform duration-300 hover:scale-110">
+                    <i data-lucide="twitter" class="w-8 h-8"></i>
+                </a>
+            </div>
+        </section>
 
-      // Simple AI for right paddle
-      let target = ball.y - (PADDLE_HEIGHT - BALL_SIZE) / 2;
-      if (rightPaddle.y < target) rightPaddle.y += Math.min(PADDLE_SPEED * 0.86, target - rightPaddle.y);
-      else if (rightPaddle.y > target) rightPaddle.y -= Math.min(PADDLE_SPEED * 0.86, rightPaddle.y - target);
-      // Clamp
-      if (rightPaddle.y < 0) rightPaddle.y = 0;
-      if (rightPaddle.y + PADDLE_HEIGHT > HEIGHT) rightPaddle.y = HEIGHT - PADDLE_HEIGHT;
+    </main>
 
-      // Move ball
-      ball.x += ball.vx;
-      ball.y += ball.vy;
+    <!-- ===== FOOTER ===== -->
+    <footer class="bg-gray-900 border-t border-gray-800">
+        <div class="container mx-auto px-6 py-6 text-center text-gray-400">
+            <p>&copy; 2024 [Tu Nombre]. Todos los derechos reservados.</p>
+            <p class="text-sm mt-1">Diseñado con <span class="text-red-500">&hearts;</span> y código.</p>
+        </div>
+    </footer>
+    
+    <!-- Iconos: Lucide Icons -->
+    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide.js"></script>
+    <script>
+        // Inicializar Lucide Icons
+        lucide.createIcons();
 
-      // Ball collision with top/bottom
-      if (ball.y < 0) {
-        ball.y = 0;
-        ball.vy = -ball.vy;
-      }
-      if (ball.y + BALL_SIZE > HEIGHT) {
-        ball.y = HEIGHT - BALL_SIZE;
-        ball.vy = -ball.vy;
-      }
+        // Lógica para el menú móvil
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const menuIconOpen = document.getElementById('menu-icon-open');
+        const menuIconClose = document.getElementById('menu-icon-close');
 
-      // Ball collision with paddles
-      // Left paddle
-      if (
-        ball.x < leftPaddle.x + PADDLE_WIDTH &&
-        ball.x > leftPaddle.x &&
-        ball.y + BALL_SIZE > leftPaddle.y &&
-        ball.y < leftPaddle.y + PADDLE_HEIGHT
-      ) {
-        ball.x = leftPaddle.x + PADDLE_WIDTH;
-        ball.vx = -ball.vx;
-        // Add some "spin"
-        ball.vy += ((ball.y + BALL_SIZE / 2) - (leftPaddle.y + PADDLE_HEIGHT / 2)) * 0.18;
-      }
-      // Right paddle
-      if (
-        ball.x + BALL_SIZE > rightPaddle.x &&
-        ball.x + BALL_SIZE < rightPaddle.x + PADDLE_WIDTH &&
-        ball.y + BALL_SIZE > rightPaddle.y &&
-        ball.y < rightPaddle.y + PADDLE_HEIGHT
-      ) {
-        ball.x = rightPaddle.x - BALL_SIZE;
-        ball.vx = -ball.vx;
-        ball.vy += ((ball.y + BALL_SIZE / 2) - (rightPaddle.y + PADDLE_HEIGHT / 2)) * 0.18;
-      }
+        mobileMenuButton.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+            menuIconOpen.classList.toggle('hidden');
+            menuIconClose.classList.toggle('hidden');
+        });
 
-      // Ball out of bounds (score)
-      if (ball.x < 0) {
-        scores[1] += 1;
-        resetBall(-1);
-      }
-      if (ball.x + BALL_SIZE > WIDTH) {
-        scores[0] += 1;
-        resetBall(1);
-      }
+        // Cerrar menú móvil al hacer clic en un enlace
+        mobileMenu.addEventListener('click', (event) => {
+            if (event.target.tagName === 'A') {
+                mobileMenu.classList.add('hidden');
+                menuIconOpen.classList.remove('hidden');
+                menuIconClose.classList.add('hidden');
+            }
+        });
+        
+        // Lógica para la animación de revelado al hacer scroll
+        const revealElements = document.querySelectorAll('.reveal');
 
-      // Update scoreboard
-      scoreboard.textContent = `${scores[0]} : ${scores[1]}`;
-    }
+        const observer = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    // Opcional: dejar de observar el elemento una vez que es visible
+                    // observer.unobserve(entry.target);
+                }
+            });
+        }, {
+            threshold: 0.1 // El elemento se revela cuando el 10% es visible
+        });
 
-    function resetBall(direction = 1) {
-      ball.x = WIDTH / 2 - BALL_SIZE / 2;
-      ball.y = HEIGHT / 2 - BALL_SIZE / 2;
-      // Randomize vertical speed and direction
-      ball.vx = BALL_SPEED * direction;
-      ball.vy = BALL_SPEED * (Math.random() * 2 - 1);
-    }
+        revealElements.forEach(element => {
+            observer.observe(element);
+        });
 
-    function gameLoop() {
-      update();
-      draw();
-      requestAnimationFrame(gameLoop);
-    }
-
-    // Start game
-    gameLoop();
-  </script>
+    </script>
 </body>
 </html>
