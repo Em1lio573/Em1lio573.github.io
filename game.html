@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campo de Batalla Táctico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press+Start+2P', cursive;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        canvas {
+            background-color: #080c10;
+            border: 4px solid #4a5568;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .targeting {
+             cursor: crosshair !important;
+        }
+        .ui-panel {
+            background-color: #2d3748;
+            border: 2px solid #4a5568;
+            border-radius: 8px;
+            padding: 1rem;
+            width: 100%;
+            max-width: 860px;
+        }
+        .placement-option {
+            border: 2px solid #4a5568;
+            padding: 0.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .placement-option.selected {
+            border-color: #63b3ed;
+            background-color: #4299e120;
+            transform: scale(1.05);
+        }
+        .placement-option.p2.selected {
+            border-color: #f56565;
+            background-color: #f5656520;
+        }
+        .placement-option.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #4a556850;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="text-3xl mb-4 text-cyan-400 tracking-wider">Campo de Batalla Táctico</h1>
+
+    <div id="game-status" class="ui-panel text-center mb-4 text-lg"></div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="flex gap-4 w-full max-w-4xl mt-4">
+        <div id="controls-panel" class="ui-panel w-full">
+            <h2 class="text-lg text-center mb-3">Comprar Unidades</h2>
+            <div class="grid grid-cols-5 gap-4">
+                <div id="select-tank" class="placement-option">
+                    <p class="text-2xl">💣</p>
+                    <p>Tanque</p>
+                    <p class="text-sm text-yellow-400">(2 Pts)</p>
+                </div>
+                <div id="select-wall" class="placement-option">
+                    <p class="text-2xl">🧱</p>
+                    <p>Muro</p>
+                    <p class="text-sm text-yellow-400">(1 Pto)</p>
+                </div>
+                <div id="select-repair" class="placement-option">
+                    <p class="text-2xl">🛠️</p>
+                    <p>Reparar</p>
+                    <p class="text-sm text-yellow-400">(3 Pts)</p>
+                </div>
+                <div id="select-shield" class="placement-option">
+                    <p class="text-2xl">🛡️</p>
+                    <p>Escudo</p>
+                    <p class="text-sm text-yellow-400">(5 Pts)</p>
+                </div>
+                 <div id="select-missile" class="placement-option">
+                    <p class="text-2xl">🚀</p>
+                    <p>Misil</p>
+                    <p class="text-sm text-yellow-400">(5 Pts)</p>
+                </div>
+            </div>
+        </div>
+        <div id="turn-panel" class="ui-panel w-1/4 flex flex-col justify-center items-center">
+             <h2 class="text-lg text-center mb-2">Puntos: <span id="action-points"></span></h2>
+             <button id="end-turn-btn" class="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-500 text-white font-bold py-4 px-2 rounded-lg text-base">Finalizar</button>
+        </div>
+    </div>
+    
+     <button id="restart-btn" class="mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-lg text-lg tracking-wider">Reiniciar Juego</button>
+
+    <script>
+    // --- CONFIGURACIÓN DEL JUEGO ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('game-status');
+    const restartBtn = document.getElementById('restart-btn');
+    const selectTankBtn = document.getElementById('select-tank');
+    const selectWallBtn = document.getElementById('select-wall');
+    const selectRepairBtn = document.getElementById('select-repair');
+    const selectShieldBtn = document.getElementById('select-shield');
+    const selectMissileBtn = document.getElementById('select-missile');
+    const actionPointsEl = document.getElementById('action-points');
+    const endTurnBtn = document.getElementById('end-turn-btn');
+
+    const TILE_SIZE = 40;
+    const MAP_COLS = 16;
+    const MAP_ROWS = 12;
+
+    canvas.width = TILE_SIZE * MAP_COLS;
+    canvas.height = TILE_SIZE * MAP_ROWS;
+
+    const TANK_HP = 1;
+    const WALL_HP = 3;
+    const CORE_HP = 3;
+    const REPAIR_STATION_HP = 1;
+    const SHIELD_GENERATOR_HP = 2;
+    const MISSILE_SILO_HP = 1;
+    const ACTION_POINTS_PER_TURN = 4;
+    const COSTS = { tank: 2, wall: 1, repair: 3, shield: 5, missile: 5 };
+    const BULLET_SPEED = 6;
+    const MISSILE_SPEED = 4;
+
+    let board, players, currentPlayer, selectedUnit, gameState, bullets, effects, particles, missiles;
+    
+    const PLAYER_INFO = {
+        'player1': { color: '#4299e1', name: 'Jugador 1 (Azul)', repairColor: '#63b3ed' },
+        'player2': { color: '#f56565', name: 'Jugador 2 (Rojo)', repairColor: '#fc8181' }
+    };
+    
+    class Bullet {
+        constructor(x, y, dx, dy, owner) {
+            this.x = x; this.y = y; this.dx = dx; this.dy = dy;
+            this.owner = owner; this.color = PLAYER_INFO[owner].color;
+            this.radius = 5;
+        }
+        update() { this.x += this.dx; this.y += this.dy; }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+    
+    class Missile {
+        constructor(from, to, owner) {
+            this.x = from.x; this.y = from.y;
+            this.targetX = to.x; this.targetY = to.y;
+            this.owner = owner;
+            const angle = Math.atan2(to.y - from.y, to.x - from.x);
+            this.dx = Math.cos(angle) * MISSILE_SPEED;
+            this.dy = Math.sin(angle) * MISSILE_SPEED;
+            this.rotation = angle + Math.PI / 2;
+        }
+        update() {
+            this.x += this.dx;
+            this.y += this.dy;
+        }
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.font = `${TILE_SIZE * 0.6}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🚀', 0, 0);
+            ctx.restore();
+        }
+        hasReachedTarget() {
+            const dist = Math.sqrt(Math.pow(this.targetX - this.x, 2) + Math.pow(this.targetY - this.y, 2));
+            return dist < MISSILE_SPEED;
+        }
+    }
+    
+    class Particle {
+        constructor(x, y, color) {
+            this.x = x; this.y = y;
+            this.vx = (Math.random() - 0.5) * 4;
+            this.vy = (Math.random() - 0.5) * 4;
+            this.life = 30 + Math.random() * 30;
+            this.color = color;
+            this.size = Math.random() * 5 + 2;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life--;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = this.life / 60;
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+
+    // --- LÓGICA DEL JUEGO ---
+
+    function init() {
+        gameState = 'placement';
+        currentPlayer = 'player1';
+        selectedUnit = 'tank';
+        bullets = [];
+        effects = [];
+        particles = [];
+        missiles = [];
+
+        board = Array.from({ length: MAP_ROWS }, () => Array(MAP_COLS).fill(null));
+        
+        const coreRow = Math.floor(MAP_ROWS / 2);
+        
+        board[coreRow][0] = { type: 'core', owner: 'player1', hp: CORE_HP, maxHp: CORE_HP };
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = 0; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                board[coreRow + dr][0 + dc] = { type: 'wall', owner: 'player1', hp: WALL_HP, maxHp: WALL_HP };
+            }
+        }
+        
+        board[coreRow][MAP_COLS - 1] = { type: 'core', owner: 'player2', hp: CORE_HP, maxHp: CORE_HP };
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 0; dc++) {
+                 if (dr === 0 && dc === 0) continue;
+                board[coreRow + dr][MAP_COLS - 1 + dc] = { type: 'wall', owner: 'player2', hp: WALL_HP, maxHp: WALL_HP };
+            }
+        }
+       
+        players = {
+            player1: { actionPoints: ACTION_POINTS_PER_TURN },
+            player2: { actionPoints: 0 }
+        };
+        
+        endTurnBtn.disabled = false;
+        if(animationFrameId) cancelAnimationFrame(animationFrameId);
+        gameLoop();
+        updateUI();
+    }
+    
+    async function switchTurn() {
+        if (gameState !== 'placement') return;
+        
+        await runMissilePhase();
+        await runShieldPhase();
+        await runCombatPhase();
+        await runRepairPhase();
+
+        const winner = checkWinCondition();
+        if (winner) {
+            gameState = 'gameOver';
+            statusEl.innerHTML = `¡GANA EL ${PLAYER_INFO[winner].name}!`;
+            statusEl.style.backgroundColor = PLAYER_INFO[winner].color;
+            statusEl.style.color = '#FFFFFF';
+            endTurnBtn.disabled = true;
+            return;
+        }
+
+        currentPlayer = (currentPlayer === 'player1') ? 'player2' : 'player1';
+        players[currentPlayer].actionPoints += ACTION_POINTS_PER_TURN;
+        selectedUnit = 'tank';
+        gameState = 'placement';
+        updateUI();
+    }
+    
+    function updateUI() {
+        const player = players[currentPlayer];
+        const playerInfo = PLAYER_INFO[currentPlayer];
+        const stateMessages = {
+            placement: `Turno de ${playerInfo.name}<br><span class='text-sm text-gray-300'>Construye o rota tanques</span>`,
+            targeting: `SELECCIONA OBJETIVO PARA EL MISIL`,
+            shielding: 'FASE DE ESCUDOS...',
+            combat: 'FASE DE COMBATE...',
+            repair: 'FASE DE REPARACIÓN...',
+            missile: 'FASE DE MISILES...'
+        };
+
+        statusEl.innerHTML = stateMessages[gameState] || '';
+        if (gameState === 'placement') {
+            statusEl.style.backgroundColor = playerInfo.color + '30';
+            statusEl.style.color = playerInfo.color;
+            endTurnBtn.disabled = false;
+            canvas.classList.remove('targeting');
+        } else {
+             canvas.classList.toggle('targeting', gameState === 'targeting');
+            statusEl.style.backgroundColor = '#4a5568';
+            statusEl.style.color = '#f6e05e';
+            endTurnBtn.disabled = true;
+        }
+        
+        actionPointsEl.textContent = player.actionPoints;
+        
+        const allBtns = [selectTankBtn, selectWallBtn, selectRepairBtn, selectShieldBtn, selectMissileBtn];
+        allBtns.forEach(el => { el.classList.remove('p2'); el.classList.remove('selected'); });
+        if (currentPlayer === 'player2') {
+            allBtns.forEach(el => el.classList.add('p2'));
+        }
+
+        const selectedBtn = { tank: selectTankBtn, wall: selectWallBtn, repair: selectRepairBtn, shield: selectShieldBtn, missile: selectMissileBtn }[selectedUnit];
+        if(selectedBtn) selectedBtn.classList.add('selected');
+        
+        selectTankBtn.classList.toggle('disabled', player.actionPoints < COSTS.tank);
+        selectWallBtn.classList.toggle('disabled', player.actionPoints < COSTS.wall);
+        selectRepairBtn.classList.toggle('disabled', player.actionPoints < COSTS.repair);
+        selectShieldBtn.classList.toggle('disabled', player.actionPoints < COSTS.shield);
+        selectMissileBtn.classList.toggle('disabled', player.actionPoints < COSTS.missile);
+    }
+
+    function handleCellClick(event) {
+        if (gameState !== 'placement' && gameState !== 'targeting') return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const col = Math.floor(x / TILE_SIZE);
+        const row = Math.floor(y / TILE_SIZE);
+
+        if (gameState === 'targeting') {
+            const targetUnit = board[row]?.[col];
+            if(targetUnit?.type === 'core'){
+                return;
+            }
+            
+            board[pendingMissile.silo.row][pendingMissile.silo.col] = {
+                type: 'missile', owner: currentPlayer, hp: MISSILE_SILO_HP, maxHp: MISSILE_SILO_HP, 
+                target: {row, col}, from: pendingMissile.silo
+            };
+            pendingMissile = null;
+            gameState = 'placement';
+            updateUI();
+            return;
+        }
+
+        const unit = board[row]?.[col];
+        
+        if (unit) {
+            if (unit.type === 'tank' && unit.owner === currentPlayer) {
+                unit.direction = getNextDirection(unit.direction);
+            }
+        } else {
+            if (!isAdjacentToFriendly(row, col)) { return; }
+
+            const player = players[currentPlayer];
+            const cost = COSTS[selectedUnit];
+            
+            if (player.actionPoints >= cost) {
+                player.actionPoints -= cost;
+
+                if (selectedUnit === 'missile') {
+                    pendingMissile = { silo: {row, col} };
+                    gameState = 'targeting';
+                } else {
+                    let hp, maxHp;
+                    if(selectedUnit === 'tank') { hp = TANK_HP; maxHp = TANK_HP; }
+                    else if(selectedUnit === 'wall') { hp = WALL_HP; maxHp = WALL_HP; }
+                    else if(selectedUnit === 'repair') { hp = REPAIR_STATION_HP; maxHp = REPAIR_STATION_HP; }
+                    else { hp = SHIELD_GENERATOR_HP; maxHp = SHIELD_GENERATOR_HP; }
+                    const newUnit = { type: selectedUnit, owner: currentPlayer, hp, maxHp, placementAnim: 10 };
+                    if (selectedUnit === 'tank') {
+                        newUnit.direction = (currentPlayer === 'player1') ? 'right' : 'left';
+                    }
+                    board[row][col] = newUnit;
+                }
+                updateUI();
+            }
+        }
+    }
+    
+    function isAdjacentToFriendly(row, col) {
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                const r = row + dr;
+                const c = col + dc;
+                if (board[r]?.[c]?.owner === currentPlayer) { return true; }
+            }
+        }
+        return false;
+    }
+
+    function getNextDirection(dir) {
+        const sequence = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
+        const currentIndex = sequence.indexOf(dir);
+        return sequence[(currentIndex + 1) % sequence.length];
+    }
+    
+    // --- LÓGICA DE FASES Y ANIMACIÓN ---
+    
+    function dealDamage(unit) {
+        if(unit.shield > 0) {
+            unit.shield = 0;
+            createExplosion(unit.x + TILE_SIZE / 2, unit.y + TILE_SIZE/2, '#fff', 5);
+        } else {
+            unit.hp--;
+            unit.hitAnim = 10;
+        }
+        if(unit.hp <= 0) {
+            createExplosion(unit.x + TILE_SIZE / 2, unit.y + TILE_SIZE / 2, PLAYER_INFO[unit.owner].color, 30);
+        }
+    }
+
+    async function runMissilePhase() {
+        gameState = 'missile';
+        updateUI();
+
+        for (let r = 0; r < MAP_ROWS; r++) {
+            for (let c = 0; c < MAP_COLS; c++) {
+                const unit = board[r][c];
+                if (unit?.type === 'missile') {
+                    const fromPos = { x: unit.from.col * TILE_SIZE + TILE_SIZE/2, y: unit.from.row * TILE_SIZE + TILE_SIZE/2 };
+                    const toPos = { x: unit.target.col * TILE_SIZE + TILE_SIZE/2, y: unit.target.row * TILE_SIZE + TILE_SIZE/2 };
+                    missiles.push(new Missile(fromPos, toPos, unit.owner));
+                    board[r][c] = null;
+                }
+            }
+        }
+        await runMissileAnimation();
+        board.forEach((row, r) => row.forEach((unit, c) => {
+            if (unit && unit.hp <= 0) board[r][c] = null;
+        }));
+    }
+    
+    async function runShieldPhase() {
+        gameState = 'shielding';
+        updateUI();
+        board.flat().forEach(unit => { if (unit) unit.shield = 0; });
+        
+        let didShield = false;
+        for (let r = 0; r < MAP_ROWS; r++) {
+            for (let c = 0; c < MAP_COLS; c++) {
+                const unit = board[r][c];
+                if (unit?.type === 'shield') {
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            const adjacentUnit = board[r + dr]?.[c + dc];
+                            if (adjacentUnit && adjacentUnit.owner === unit.owner) {
+                                adjacentUnit.shield = 1;
+                                didShield = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (didShield) await sleep(500);
+    }
+    
+    async function runCombatPhase() {
+        gameState = 'combat';
+        updateUI();
+        createCombatBullets();
+        await runCombatAnimation();
+    }
+    
+    function createCombatBullets() {
+        for (let r = 0; r < MAP_ROWS; r++) {
+            for (let c = 0; c < MAP_COLS; c++) {
+                const unit = board[r][c];
+                if (unit?.type === 'tank') {
+                    const dirMap = { 
+                        'up': {r: -1, c: 0}, 'down': {r: 1, c: 0}, 'left': {r: 0, c: -1}, 'right': {r: 0, c: 1},
+                        'up-left': {r: -1, c: -1}, 'up-right': {r: -1, c: 1}, 'down-left': {r: 1, c: -1}, 'down-right': {r: 1, c: 1}
+                    };
+                    const dir = dirMap[unit.direction];
+                    const startX = c * TILE_SIZE + TILE_SIZE / 2;
+                    const startY = r * TILE_SIZE + TILE_SIZE / 2;
+                    effects.push({type: 'muzzleFlash', x: startX, y: startY, life: 5, angle: Math.atan2(dir.r, dir.c)});
+                    const magnitude = Math.sqrt(dir.c * dir.c + dir.r * dir.r);
+                    const velX = (dir.c / magnitude) * BULLET_SPEED;
+                    const velY = (dir.r / magnitude) * BULLET_SPEED;
+                    bullets.push(new Bullet(startX, startY, velX, velY, unit.owner));
+                }
+            }
+        }
+    }
+    
+    function runCombatAnimation() {
+        return new Promise(resolve => {
+            const animate = () => {
+                if (bullets.length === 0) { resolve(); return; }
+                requestAnimationFrame(animate);
+            };
+            animate();
+        });
+    }
+
+    async function runRepairPhase() {
+        gameState = 'repair';
+        updateUI();
+        
+        let didRepair = false;
+        for (let r = 0; r < MAP_ROWS; r++) {
+            for (let c = 0; c < MAP_COLS; c++) {
+                const unit = board[r][c];
+                if (unit?.type === 'repair') {
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const adjacentUnit = board[r + dr]?.[c + dc];
+                            if (adjacentUnit && adjacentUnit.owner === unit.owner && adjacentUnit.hp < adjacentUnit.maxHp) {
+                                adjacentUnit.hp++;
+                                effects.push({type: 'repair', x: (c+dc)*TILE_SIZE, y: (r+dr)*TILE_SIZE, life: 20, color: PLAYER_INFO[unit.owner].repairColor});
+                                didRepair = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (didRepair) await runEffectsAnimation();
+    }
+    
+    function runMissileAnimation() {
+        return new Promise(resolve => {
+            const animate = () => {
+                if (missiles.length === 0) { resolve(); return; }
+                requestAnimationFrame(animate);
+            };
+            animate();
+        });
+    }
+
+    function runEffectsAnimation() {
+         return new Promise(resolve => {
+            if (effects.length === 0) { resolve(); return; }
+            const animate = () => {
+                if (effects.length === 0) { resolve(); return; }
+                requestAnimationFrame(animate);
+            };
+            animate();
+        });
+    }
+
+    function checkWinCondition() {
+        let p1CoreHp = 0;
+        let p2CoreHp = 0;
+        board.flat().forEach(unit => {
+            if (unit?.type === 'core') {
+                if (unit.owner === 'player1') p1CoreHp = unit.hp;
+                else p2CoreHp = unit.hp;
+            }
+        });
+        if (p1CoreHp > 0 && p2CoreHp <= 0) return 'player1';
+        if (p2CoreHp > 0 && p1CoreHp <= 0) return 'player2';
+        return null;
+    }
+    
+    function createExplosion(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            particles.push(new Particle(x, y, color));
+        }
+    }
+
+
+    // --- BUCLE PRINCIPAL Y DIBUJADO ---
+    let animationFrameId;
+
+    function gameLoop() {
+        update();
+        draw();
+        animationFrameId = requestAnimationFrame(gameLoop);
+    }
+
+    function update() {
+        bullets.forEach((bullet, i) => {
+            bullet.update();
+            if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                bullets.splice(i, 1); return;
+            }
+            const row = Math.floor(bullet.y / TILE_SIZE);
+            const col = Math.floor(bullet.x / TILE_SIZE);
+            const targetUnit = board[row]?.[col];
+            if (targetUnit && targetUnit.owner !== bullet.owner) {
+                dealDamage(targetUnit);
+                if (targetUnit.hp <= 0) board[row][col] = null;
+                bullets.splice(i, 1);
+            }
+        });
+
+        missiles.forEach((missile, i) => {
+            missile.update();
+            if (missile.hasReachedTarget()) {
+                const targetRow = Math.floor(missile.targetY / TILE_SIZE);
+                const targetCol = Math.floor(missile.targetX / TILE_SIZE);
+                const hitUnit = board[targetRow]?.[targetCol];
+                if (hitUnit) dealDamage(hitUnit);
+                createExplosion(missile.targetX, missile.targetY, '#FFA500', 50);
+                if (hitUnit?.hp <= 0) board[targetRow][targetCol] = null;
+                missiles.splice(i, 1);
+            }
+        });
+
+        particles.forEach((p, i) => {
+            p.update();
+            if (p.life <= 0) particles.splice(i, 1);
+        });
+        effects.forEach((e, i) => {
+            e.life--;
+            if (e.life <= 0) effects.splice(i, 1);
+        });
+        board.flat().forEach(unit => {
+            if (unit?.placementAnim > 0) unit.placementAnim--;
+            if (unit?.hitAnim > 0) unit.hitAnim--;
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+        drawUnits();
+        bullets.forEach(b => b.draw());
+        missiles.forEach(m => m.draw());
+        particles.forEach(p => p.draw());
+        drawEffects();
+    }
+    
+    function drawGrid() {
+        ctx.strokeStyle = '#2d3748';
+        for (let x = 0; x <= canvas.width; x += TILE_SIZE) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let y = 0; y <= canvas.height; y += TILE_SIZE) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+    }
+
+    function drawUnits() {
+        for (let row = 0; row < MAP_ROWS; row++) {
+            for (let col = 0; col < MAP_COLS; col++) {
+                const unit = board[row][col];
+                if (unit) {
+                    const x = col * TILE_SIZE;
+                    const y = row * TILE_SIZE;
+                    
+                    ctx.save();
+                    const scale = unit.placementAnim > 0 ? 1 - unit.placementAnim / 20 : 1;
+                    const shakeX = unit.hitAnim > 0 ? Math.sin(unit.hitAnim) * 3 : 0;
+                    ctx.translate(x + shakeX + TILE_SIZE / 2, y + TILE_SIZE / 2);
+                    ctx.scale(scale, scale);
+                    ctx.translate(-(x + TILE_SIZE / 2), -(y + TILE_SIZE / 2));
+                    
+                    ctx.globalAlpha = unit.hitAnim > 0 ? 0.5 : 1.0;
+                    ctx.fillStyle = PLAYER_INFO[unit.owner].color + '80';
+                    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    ctx.globalAlpha = 1.0;
+                    if(unit.hitAnim > 0) {
+                        ctx.fillStyle = '#ff000080';
+                        ctx.fillRect(x,y,TILE_SIZE, TILE_SIZE);
+                    }
+                    
+                    const emojiMap = { tank: '💣', wall: '🧱', core: '🎯', repair: '🛠️', shield: '🛡️', missile: '🚀'};
+                    const emoji = emojiMap[unit.type] || '';
+
+                    ctx.font = `${TILE_SIZE * 0.6}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(emoji, x + TILE_SIZE / 2, y + TILE_SIZE / 2 + 2);
+
+                    if (unit.type === 'tank') {
+                        drawCannon(x, y, unit.direction);
+                    }
+                    if (unit.shield > 0) {
+                        drawShield(x,y,unit.owner);
+                    }
+                    drawHP(x, y, unit.hp, unit.maxHp);
+                    ctx.restore();
+                }
+            }
+        }
+    }
+
+    function drawCannon(x, y, direction) {
+        const centerX = x + TILE_SIZE / 2;
+        const centerY = y + TILE_SIZE / 2;
+        const cannonLength = TILE_SIZE / 3;
+        const cannonWidth = TILE_SIZE / 5;
+        
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        const dirMap = { 
+            'up': 0, 'up-right': Math.PI/4, 'right': Math.PI/2, 'down-right': 3*Math.PI/4, 
+            'down': Math.PI, 'down-left': 5*Math.PI/4, 'left': 3*Math.PI/2, 'up-left': 7*Math.PI/4
+        };
+        ctx.rotate(dirMap[direction]);
+        
+        ctx.fillStyle = '#A0AEC0';
+        ctx.fillRect(-cannonWidth / 2, -cannonLength * 1.8, cannonWidth, cannonLength);
+        ctx.restore();
+    }
+
+    function drawHP(x, y, hp, maxHp) {
+        ctx.fillStyle = '#FFFFFF';
+        const hpDotRadius = 2.5;
+        const spacing = 8;
+        const startX = x + TILE_SIZE / 2 - (spacing * (maxHp - 1)) / 2;
+        
+        for (let i = 0; i < hp; i++) {
+            ctx.beginPath();
+            ctx.arc(startX + i * spacing, y + TILE_SIZE - 8, hpDotRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function drawShield(x, y, owner) {
+        ctx.strokeStyle = PLAYER_INFO[owner].repairColor;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 200) * 0.2;
+        ctx.beginPath();
+        ctx.arc(x + TILE_SIZE / 2, y + TILE_SIZE / 2, TILE_SIZE / 2 * 0.9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 1;
+    }
+    
+    function drawEffects() {
+        for (const effect of effects) {
+            ctx.globalAlpha = effect.life / 20;
+            if (effect.type === 'repair') {
+                ctx.font = `bold ${TILE_SIZE * 0.5}px sans-serif`;
+                ctx.fillStyle = effect.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('+', effect.x + TILE_SIZE / 2, effect.y + TILE_SIZE / 2 - (20 - effect.life) / 2);
+            } else if (effect.type === 'muzzleFlash') {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, TILE_SIZE*0.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+    }
+    
+    // --- CONTROLES Y EVENTOS ---
+    restartBtn.addEventListener('click', init);
+    canvas.addEventListener('click', handleCellClick);
+    endTurnBtn.addEventListener('click', switchTurn);
+    
+    const unitSelectors = {
+        tank: selectTankBtn, wall: selectWallBtn, repair: selectRepairBtn, shield: selectShieldBtn, missile: selectMissileBtn
+    };
+
+    Object.entries(unitSelectors).forEach(([type, btn]) => {
+        btn.addEventListener('click', () => {
+            if(players[currentPlayer].actionPoints >= COSTS[type] && gameState === 'placement') {
+                selectedUnit = type;
+                updateUI();
+            }
+        });
+    });
+
+    // --- INICIO ---
+    init();
+
+    </script>
+</body>
+</html>
